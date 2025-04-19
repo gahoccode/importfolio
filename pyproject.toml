@@ -7,16 +7,17 @@ requires-python = "==3.10"
 [tool.uv]
 # uv-specific settings can go here
 
-[project.dependencies]
-Flask = "==3.0.2"
-vnstock = "==3.2.3"
-pandas = "==2.2.3"
-numpy = "==2.2.4"
-matplotlib = "==3.10.1"
-PyPortfolioOpt = "==1.5.6"
-pytest = "==8.3.5"
-cvxpy = "==1.6.5"
-scipy = "==1.15.2"
-osqp = "==1.0.3"
-ecos = "==2.0.14"
-scs = "==3.2.7.post2"
+dependencies = [
+    "Flask==3.0.2",
+    "vnstock==3.2.3",
+    "pandas==2.2.3",
+    "numpy==2.2.4",
+    "matplotlib==3.10.1",
+    "PyPortfolioOpt==1.5.6",
+    "pytest==8.3.5",
+    "cvxpy==1.6.5",
+    "scipy==1.15.2",
+    "osqp==1.0.3",
+    "ecos==2.0.14",
+    "scs==3.2.7.post2"
+]
