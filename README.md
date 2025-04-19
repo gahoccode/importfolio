@@ -19,6 +19,9 @@ This tool provides portfolio optimization and analysis using several methods, in
 **Note:** The optimizer's metrics are generally more accurate. The random simulation is for illustration and exploration.
 
 ## Usage
+
+> **Note:** Stock data is only available from 2011 onward.
+
 1. Select tickers and date range.
 2. Choose an optimization method.
 3. Click "Optimize Portfolio" for analytical results, or "Show Random Portfolios" to see simulation results and visualizations.
