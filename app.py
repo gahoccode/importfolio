@@ -2,9 +2,27 @@ from flask import Flask, render_template, request, jsonify, send_file, session, 
 from flask import flash
 from data_loader import DataLoader
 import os
+import uuid
+import json
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your_secret_key')  # Needed for session
+
+TMP_DIR = os.path.join(os.path.dirname(__file__), 'tmp')
+os.makedirs(TMP_DIR, exist_ok=True)
+
+def save_latest_prices_df(df):
+    key = str(uuid.uuid4())
+    path = os.path.join(TMP_DIR, f"{key}.json")
+    df.to_json(path, orient="split")
+    return key
+
+def load_latest_prices_df(key):
+    path = os.path.join(TMP_DIR, f"{key}.json")
+    if not os.path.exists(path):
+        return None
+    import pandas as pd
+    return pd.read_json(path, orient="split")
 
 @app.route("/")
 def index():
@@ -19,9 +37,10 @@ def load_data():
     loader = DataLoader(symbols, start_date, end_date)
     all_data = loader.fetch()
     combined = DataLoader.combine_close_prices(all_data)
-    # Save the last loaded prices in session for chart rendering
+    # Save the last loaded prices on disk, store key in session
     if not isinstance(combined, dict):
-        session['latest_prices'] = combined.to_dict(orient="split")
+        key = save_latest_prices_df(combined)
+        session['latest_prices_key'] = key
     # Return as dict for test compatibility with columns preserved
     if isinstance(combined, dict):
         return jsonify(combined)
@@ -29,6 +48,7 @@ def load_data():
         result = combined.to_dict(orient="split")
         # Store original column names (tickers) in the response
         result["columns"] = combined.columns.tolist()
+        result["latest_prices_key"] = session.get('latest_prices_key')
         return jsonify(result)
 
 from optimizer import PortfolioOptimizer
@@ -286,22 +306,13 @@ def random_portfolios():
 @app.route("/efficient_frontier_chart")
 def efficient_frontier_chart():
     # Use the latest prices from session
-    latest_prices = session.get('latest_prices')
-    if not latest_prices:
+    key = session.get('latest_prices_key')
+    if not key:
         flash("No price data available. Please upload data first.")
-        # Return a placeholder image or error
         from flask import abort
         return abort(404)
-    # Reconstruct DataFrame
-    df_data = latest_prices["data"]
-    df_index = latest_prices["index"]
-    df_columns = latest_prices["columns"]
-    prices = pd.DataFrame(df_data, index=df_index, columns=df_columns)
-    if not isinstance(prices.index, pd.DatetimeIndex):
-        prices.index = pd.to_datetime(prices.index)
-    prices = prices.apply(pd.to_numeric, errors='coerce')
-    prices = prices.dropna(axis=1, how='all').dropna(axis=0, how='any')
-    if prices.empty:
+    prices = load_latest_prices_df(key)
+    if prices is None or prices.empty:
         from flask import abort
         return abort(404)
     optimizer = PortfolioOptimizer(prices)
