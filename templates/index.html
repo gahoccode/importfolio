@@ -21,26 +21,51 @@
             <select id="method-select">
                 <option value="mean_variance">Mean-Variance (Max Sharpe)</option>
                 <option value="min_variance">Minimum Variance</option>
-                <option value="max_sharpe">Maximum Sharpe Ratio</option>
                 <option value="cvar">Minimum CVaR</option>
             </select>
         </label>
         <button id="optimize-btn">Optimize Portfolio</button>
         <button id="frontier-btn">Show Efficient Frontier</button>
         <button id="random-btn" disabled>Show Random Portfolios</button>
-        <button id="plot-btn" disabled>Generate Efficient Frontier Plot</button>
+
         <div id="results-section" style="margin-top:1em;"></div>
         <div id="max-sharpe-section" style="margin-top:1em; display:none;"></div>
         <div id="frontier-section" style="margin-top:1em;"></div>
         <canvas id="frontier-chart" width="600" height="350" style="display:none;margin-top:1em;"></canvas>
-        <div id="plot-section" style="margin-top:1em; display:none;">
-            <h3>Efficient Frontier Plot with Random Portfolios</h3>
-            <img id="ef-plot" src="/efficient_frontier_chart" style="max-width: 100%; display: none;" alt="Efficient Frontier Plot">
-        </div>
+
     </div>
 
     <script>
     let loadedPrices = null;
+    // Dynamically update button labels and states based on selected optimization method
+    document.getElementById('method-select').addEventListener('change', function() {
+        const method = this.value;
+        const frontierBtn = document.getElementById('frontier-btn');
+        const randomBtn = document.getElementById('random-btn');
+        const maxSharpeSection = document.getElementById('max-sharpe-section');
+        if (["mean_variance", "min_variance"].includes(method)) {
+            frontierBtn.textContent = "Show Efficient Frontier";
+            frontierBtn.disabled = false;
+            randomBtn.textContent = "Show Random Portfolios";
+            randomBtn.disabled = false;
+            if (maxSharpeSection.innerHTML !== '') {
+                maxSharpeSection.style.display = 'block';
+            } else {
+                maxSharpeSection.style.display = 'none';
+            }
+        } else if (method === "cvar") {
+            frontierBtn.textContent = "Show CVaR Frontier";
+            frontierBtn.disabled = false;
+            randomBtn.textContent = "Random Portfolios N/A";
+            randomBtn.disabled = true;
+            maxSharpeSection.style.display = 'none';
+        }
+    });
+    // Initialize button state on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const event = new Event('change');
+        document.getElementById('method-select').dispatchEvent(event);
+    });
     document.getElementById('data-form').onsubmit = async function(e) {
         e.preventDefault();
         const form = e.target;
@@ -79,6 +104,30 @@
             html += `<pre>${JSON.stringify(result.performance, null, 2)}</pre>`;
         }
         document.getElementById('results-section').innerHTML = html;
+
+        // Update max-sharpe-section for all methods
+        const maxSharpeSection = document.getElementById('max-sharpe-section');
+        if (method === 'cvar') {
+            // If CVaR results have sharpe/return/risk, show them, else clear
+            if (result.performance && (result.performance.sharpe_ratio !== undefined || result.performance.expected_return !== undefined || result.performance.risk !== undefined)) {
+                let cvarHtml = '<h3>CVaR Portfolio Metrics</h3>';
+                if (result.performance.sharpe_ratio !== undefined)
+                    cvarHtml += `<p>Sharpe Ratio: ${result.performance.sharpe_ratio.toFixed(4)}</p>`;
+                if (result.performance.expected_return !== undefined)
+                    cvarHtml += `<p>Expected Return: ${result.performance.expected_return.toFixed(4)}</p>`;
+                if (result.performance.risk !== undefined)
+                    cvarHtml += `<p>Risk (Volatility): ${result.performance.risk.toFixed(4)}</p>`;
+                maxSharpeSection.innerHTML = cvarHtml;
+                maxSharpeSection.style.display = 'block';
+            } else {
+                maxSharpeSection.innerHTML = '';
+                maxSharpeSection.style.display = 'none';
+            }
+        } else {
+            // For other methods, clear if not relevant (handled by random-btn)
+            maxSharpeSection.innerHTML = '';
+            maxSharpeSection.style.display = 'none';
+        }
     };
 
     document.getElementById('frontier-btn').onclick = async function(e) {
@@ -119,7 +168,7 @@
             }
         });
         document.getElementById('random-btn').disabled = false;
-        document.getElementById('plot-btn').disabled = false;
+
     };
 
     document.getElementById('random-btn').onclick = async function(e) {
@@ -192,16 +241,7 @@
         }
     };
     
-    document.getElementById('plot-btn').onclick = function(e) {
-        e.preventDefault();
-        if (!loadedPrices) return;
-        // Show the plot section and reload the image
-        document.getElementById('plot-section').style.display = 'block';
-        // Force reload the image by updating the src with a cache-buster
-        var efPlot = document.getElementById('ef-plot');
-        efPlot.src = '/efficient_frontier_chart?' + new Date().getTime();
-        efPlot.style.display = 'block';
-    };
+
     </script>
 </body>
 </html>
