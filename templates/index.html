@@ -13,6 +13,12 @@
         <label>Start Date: <input type="date" name="start_date" value="2019-01-01"></label><br>
         <label>End Date: <input type="date" name="end_date" value="2025-04-15"></label><br>
         <button type="submit">Load Data</button>
+        <div id="data-progress" style="display:none; margin-top:0.5em;">
+            <div style="width:100%;background:#eee;border-radius:8px;overflow:hidden;">
+                <div id="data-progress-bar" style="width:0%;height:16px;background:#27ae60;transition:width 0.4s;"></div>
+            </div>
+            <span id="data-progress-text" style="font-size:0.9em;color:#27ae60;">Fetching data...</span>
+        </div>
     </form>
 
     <div id="data-section" style="display:none;">
@@ -81,20 +87,52 @@
     });
     document.getElementById('data-form').onsubmit = async function(e) {
         e.preventDefault();
+        // Show and animate data progress bar
+        const dataProgressDiv = document.getElementById('data-progress');
+        const dataProgressBar = document.getElementById('data-progress-bar');
+        const dataProgressText = document.getElementById('data-progress-text');
+        dataProgressDiv.style.display = 'block';
+        dataProgressBar.style.width = '0%';
+        dataProgressText.textContent = 'Fetching data...';
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += Math.random() * 12 + 8; // Animate with some randomness
+            if (progress > 92) progress = 92; // Cap at 92% until fetch completes
+            dataProgressBar.style.width = progress + '%';
+        }, 180);
         const form = e.target;
         const symbols = form.symbols.value.split(',').map(s => s.trim());
         const start_date = form.start_date.value;
         const end_date = form.end_date.value;
-        const res = await fetch('/api/load_data', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({symbols, start_date, end_date})
-        });
-        const data = await res.json();
-        loadedPrices = data;
-        document.getElementById('data-section').style.display = 'block';
-        document.getElementById('results-section').innerHTML = '';
-        document.getElementById('frontier-section').innerHTML = '';
+        try {
+            const res = await fetch('/api/load_data', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({symbols, start_date, end_date})
+            });
+            const data = await res.json();
+            loadedPrices = data;
+            document.getElementById('data-section').style.display = 'block';
+            document.getElementById('results-section').innerHTML = '';
+            document.getElementById('frontier-section').innerHTML = '';
+            // Complete and hide progress bar
+            dataProgressBar.style.width = '100%';
+            dataProgressText.textContent = 'Data loaded!';
+            setTimeout(() => {
+                dataProgressDiv.style.display = 'none';
+                dataProgressBar.style.width = '0%';
+            }, 600);
+        } catch (err) {
+            dataProgressText.textContent = 'Failed to fetch data.';
+            dataProgressBar.style.background = '#e74c3c';
+            setTimeout(() => {
+                dataProgressDiv.style.display = 'none';
+                dataProgressBar.style.width = '0%';
+                dataProgressBar.style.background = '#27ae60';
+            }, 1600);
+        } finally {
+            clearInterval(interval);
+        }
     };
 
     document.getElementById('optimize-btn').onclick = async function(e) {
