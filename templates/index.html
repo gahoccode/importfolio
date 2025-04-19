@@ -31,6 +31,12 @@
         <div id="results-section" style="margin-top:1em;"></div>
         <div id="max-sharpe-section" style="margin-top:1em; display:none;"></div>
         <div id="frontier-section" style="margin-top:1em;"></div>
+        <div id="frontier-progress" style="display:none; margin-top:1em;">
+            <div style="width:100%;background:#eee;border-radius:8px;overflow:hidden;">
+                <div id="frontier-progress-bar" style="width:0%;height:16px;background:#3498db;transition:width 0.4s;"></div>
+            </div>
+            <span id="frontier-progress-text" style="font-size:0.9em;color:#3498db;">Loading chart...</span>
+        </div>
         <canvas id="frontier-chart" width="600" height="350" style="display:none;margin-top:1em;"></canvas>
 
     </div>
@@ -140,6 +146,20 @@
     document.getElementById('frontier-btn').onclick = async function(e) {
         e.preventDefault();
         if (!loadedPrices) return;
+        // Show progress bar
+        const progressDiv = document.getElementById('frontier-progress');
+        const progressBar = document.getElementById('frontier-progress-bar');
+        const progressText = document.getElementById('frontier-progress-text');
+        progressDiv.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressText.textContent = 'Loading chart...';
+        // Animate progress
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress = Math.min(progress + Math.random()*20, 90);
+            progressBar.style.width = progress + '%';
+        }, 300);
+
         const method = document.getElementById('method-select').value;
         const res = await fetch('/api/efficient_frontier', {
             method: 'POST',
@@ -147,6 +167,10 @@
             body: JSON.stringify({prices: loadedPrices, columns: loadedPrices.columns, method})
         });
         const result = await res.json();
+        clearInterval(interval);
+        progressBar.style.width = '100%';
+        progressText.textContent = 'Chart loaded!';
+        setTimeout(() => { progressDiv.style.display = 'none'; }, 500);
         // Table output for the efficient frontier points
         let html = '<h3>Efficient Frontier Points</h3><table><tr><th>Risk</th><th>Return</th></tr>';
         for (let i = 0; i < result.risks.length; ++i) {
