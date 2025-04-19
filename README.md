@@ -42,6 +42,22 @@ This tool provides portfolio optimization and analysis using several methods, in
    python app.py
    ```
 
+## Docker Deployment
+To deploy the application using Docker, follow these steps:
+
+1. Build the Docker image:
+   ```cmd
+   docker build -t portfolio-optimizer .
+   ```
+2. Run the Docker container:
+   ```cmd
+   docker run -p 5000:5000 portfolio-optimizer
+   ```
+3. Access the application at `http://localhost:5000`
+
+**.dockerignore explanation:**
+The `.dockerignore` file is used to specify files and directories that should be ignored by Docker during the build process. This is useful for excluding sensitive information, such as API keys or credentials, from the Docker image.
+
 ---
 
 For further details, see code comments and docstrings in the respective modules.
