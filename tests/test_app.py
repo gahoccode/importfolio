@@ -18,7 +18,7 @@ def test_load_data_endpoint(client, monkeypatch):
             }
         @staticmethod
         def combine_close_prices(data_dict):
-            return pd.DataFrame({'time': ['2024-01-01', '2024-01-02'], 'AAA_close': [10, 11]})
+            return pd.DataFrame({'time': ['2024-01-01', '2024-01-02'], 'AAA': [10, 11]})
     monkeypatch.setattr('data_loader.DataLoader', DummyLoader)
     response = client.post('/api/load_data', json={
         'symbols': ['AAA'],
@@ -27,7 +27,7 @@ def test_load_data_endpoint(client, monkeypatch):
     })
     assert response.status_code == 200
     data = response.get_json()
-    assert 'AAA_close' in data['data'][0] or 'AAA_close' in data['columns']
+    assert 'AAA' in data['data'][0] or 'AAA' in data['columns']
 
 def test_optimize_endpoint(client):
     prices = pd.DataFrame({

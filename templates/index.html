@@ -43,6 +43,13 @@
         const frontierBtn = document.getElementById('frontier-btn');
         const randomBtn = document.getElementById('random-btn');
         const maxSharpeSection = document.getElementById('max-sharpe-section');
+        // Hide and clear the frontier-chart canvas and Chart.js instance
+        const frontierChartCanvas = document.getElementById('frontier-chart');
+        if (window.frontierChart) {
+            window.frontierChart.destroy();
+            window.frontierChart = null;
+        }
+        frontierChartCanvas.style.display = 'none';
         if (["mean_variance", "min_variance"].includes(method)) {
             frontierBtn.textContent = "Show Efficient Frontier";
             frontierBtn.disabled = false;
@@ -133,32 +140,72 @@
     document.getElementById('frontier-btn').onclick = async function(e) {
         e.preventDefault();
         if (!loadedPrices) return;
+        const method = document.getElementById('method-select').value;
         const res = await fetch('/api/efficient_frontier', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({prices: loadedPrices, columns: loadedPrices.columns})
+            body: JSON.stringify({prices: loadedPrices, columns: loadedPrices.columns, method})
         });
         const result = await res.json();
-        // Table output
+        // Table output for the efficient frontier points
         let html = '<h3>Efficient Frontier Points</h3><table><tr><th>Risk</th><th>Return</th></tr>';
         for (let i = 0; i < result.risks.length; ++i) {
             html += `<tr><td>${result.risks[i].toFixed(4)}</td><td>${result.returns[i].toFixed(4)}</td></tr>`;
         }
         html += '</table>';
         document.getElementById('frontier-section').innerHTML = html;
-        // Chart output
+        // Update performance metrics and weights table for the selected method
+        let perfHtml = '';
+        if (result.optimal) {
+            let label = '';
+            if (method === 'mean_variance') label = 'Max Sharpe Portfolio';
+            else if (method === 'min_variance') label = 'Minimum Variance Portfolio';
+            else if (method === 'cvar') label = 'Minimum CVaR Portfolio';
+            perfHtml += `<h3>${label} Performance</h3>`;
+            perfHtml += `<p>Expected Return: ${result.optimal.expected_return !== undefined ? result.optimal.expected_return.toFixed(4) : ''}</p>`;
+            perfHtml += `<p>Risk (Volatility): ${result.optimal.risk !== undefined ? result.optimal.risk.toFixed(4) : ''}</p>`;
+        }
+        document.getElementById('max-sharpe-section').innerHTML = perfHtml;
+        document.getElementById('max-sharpe-section').style.display = perfHtml ? 'block' : 'none';
+        // Update weights table
+        let weightsHtml = '<h3>Portfolio Weights</h3><table><tr><th>Ticker</th><th>Weight</th></tr>';
+        if (result.weights) {
+            for (const [ticker, weight] of Object.entries(result.weights)) {
+                weightsHtml += `<tr><td>${ticker}</td><td>${(weight*100).toFixed(2)}%</td></tr>`;
+            }
+        }
+        weightsHtml += '</table>';
+        document.getElementById('results-section').innerHTML = weightsHtml;
+        // Draw chart
         const ctx = document.getElementById('frontier-chart').getContext('2d');
         document.getElementById('frontier-chart').style.display = 'block';
         if (window.frontierChart) window.frontierChart.destroy();
+        // Prepare datasets
+        const datasets = [{
+            label: 'Efficient Frontier',
+            data: result.risks.map((r, i) => ({x: r, y: result.returns[i]})),
+            backgroundColor: 'rgba(52, 152, 219, 0.6)',
+        }];
+        // Add optimal point for current method if available
+        if (result.optimal) {
+            let methodLabel = '';
+            if (method === 'mean_variance') methodLabel = 'Max Sharpe Portfolio';
+            else if (method === 'min_variance') methodLabel = 'Minimum Variance Portfolio';
+            else if (method === 'cvar') methodLabel = 'Minimum CVaR Portfolio';
+            datasets.push({
+                label: methodLabel,
+                data: [{x: result.optimal.risk, y: result.optimal.expected_return}],
+                pointRadius: 8,
+                backgroundColor: 'rgba(255, 102, 0, 0.8)',
+                borderColor: 'rgba(255, 102, 0, 1)',
+                borderWidth: 2,
+                showLine: false,
+                order: -1
+            });
+        }
         window.frontierChart = new Chart(ctx, {
             type: 'scatter',
-            data: {
-                datasets: [{
-                    label: 'Efficient Frontier',
-                    data: result.risks.map((r, i) => ({x: r, y: result.returns[i]})),
-                    backgroundColor: 'rgba(52, 152, 219, 0.6)',
-                }]
-            },
+            data: {datasets},
             options: {
                 plugins: { legend: { display: false } },
                 scales: {
@@ -168,7 +215,6 @@
             }
         });
         document.getElementById('random-btn').disabled = false;
-
     };
 
     document.getElementById('random-btn').onclick = async function(e) {
@@ -199,46 +245,59 @@
             document.getElementById('max-sharpe-section').style.display = 'block';
         }
         
-        // Remove old random portfolios dataset if present
-        if (window.frontierChart) {
-            window.frontierChart.data.datasets = window.frontierChart.data.datasets.filter(ds => ds.label !== 'Random Portfolios');
-            // Normalize sharpes for color mapping
-            const minSharpe = Math.min(...result.sharpes);
-            const maxSharpe = Math.max(...result.sharpes);
-            const colors = result.sharpes.map(s => {
-                const norm = (s - minSharpe) / (maxSharpe - minSharpe + 1e-8);
-                return `rgba(${34 + Math.round(100*norm)},193,195,0.4)`;
-            });
-            
-            // Add random portfolios to chart
-            window.frontierChart.data.datasets.push({
+        // Draw chart for random portfolios and max Sharpe portfolio
+        const ctx = document.getElementById('frontier-chart').getContext('2d');
+        document.getElementById('frontier-chart').style.display = 'block';
+        if (window.frontierChart) window.frontierChart.destroy();
+        // Normalize sharpes for color mapping
+        const minSharpe = Math.min(...result.sharpes);
+        const maxSharpe = Math.max(...result.sharpes);
+        const colors = result.sharpes.map(s => {
+            const norm = (s - minSharpe) / (maxSharpe - minSharpe + 1e-8);
+            return `rgba(${34 + Math.round(100*norm)},193,195,0.4)`;
+        });
+        const datasets = [
+            {
                 label: 'Random Portfolios',
                 data: result.risks.map((r, i) => ({x: r, y: result.returns[i]})),
                 pointRadius: 2,
                 backgroundColor: colors,
                 showLine: false,
                 order: 0
-            });
-            
-            // Highlight the max Sharpe portfolio with a distinct point
-            if (result.max_sharpe) {
-                window.frontierChart.data.datasets.push({
-                    label: 'Max Sharpe Portfolio',
-                    data: [{
-                        x: result.max_sharpe.risk,
-                        y: result.max_sharpe.expected_return
-                    }],
-                    pointRadius: 8,
-                    backgroundColor: 'rgba(255, 0, 0, 0.8)',
-                    borderColor: 'rgba(255, 0, 0, 1)',
-                    borderWidth: 2,
-                    showLine: false,
-                    order: -1 // To ensure it's drawn on top
-                });
             }
-            
-            window.frontierChart.update();
+        ];
+        // Highlight the max Sharpe portfolio (label matches method)
+        if (result.max_sharpe) {
+            let method = document.getElementById('method-select').value;
+            let methodLabel = '';
+            if (method === 'mean_variance') methodLabel = 'Max Sharpe Portfolio';
+            else if (method === 'min_variance') methodLabel = 'Minimum Variance Portfolio';
+            else if (method === 'cvar') methodLabel = 'Minimum CVaR Portfolio';
+            datasets.push({
+                label: methodLabel,
+                data: [{
+                    x: result.max_sharpe.risk,
+                    y: result.max_sharpe.expected_return
+                }],
+                pointRadius: 8,
+                backgroundColor: 'rgba(255, 102, 0, 0.8)',
+                borderColor: 'rgba(255, 102, 0, 1)',
+                borderWidth: 2,
+                showLine: false,
+                order: -1 // To ensure it's drawn on top
+            });
         }
+        window.frontierChart = new Chart(ctx, {
+            type: 'scatter',
+            data: {datasets},
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { title: { display: true, text: 'Risk (Volatility)' } },
+                    y: { title: { display: true, text: 'Expected Return' } }
+                }
+            }
+        });
     };
     
 

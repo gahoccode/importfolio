@@ -5,12 +5,12 @@ from optimizer import PortfolioOptimizer
 
 def generate_sample_prices():
     np.random.seed(42)
-    dates = pd.date_range('2024-01-01', periods=10)
-    aaa = np.cumsum(np.random.normal(0, 1, 10)) + 100
-    bbb = np.cumsum(np.random.normal(0, 1, 10)) + 120
+    dates = pd.date_range('2024-01-01', periods=10000)
+    aaa = np.cumsum(np.random.normal(0, 1, 10000)) + 100
+    bbb = np.cumsum(np.random.normal(0, 1, 10000)) + 120
     data = {
-        'AAA_close': aaa,
-        'BBB_close': bbb
+        'AAA': aaa,
+        'BBB': bbb
     }
     prices = pd.DataFrame(data, index=dates)
     return prices

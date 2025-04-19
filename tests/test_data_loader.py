@@ -32,6 +32,6 @@ def test_combine_close_prices():
         })
     }
     combined = DataLoader.combine_close_prices(data_dict)
-    assert 'AAA_close' in combined.columns
-    assert 'BBB_close' in combined.columns
-    assert list(combined['AAA_close']) == [10, 11]
+    assert 'AAA' in combined.columns
+    assert 'BBB' in combined.columns
+    assert list(combined['AAA']) == [10, 11]

@@ -168,10 +168,33 @@ def efficient_frontier():
         # Create optimizer and calculate efficient frontier
         optimizer = PortfolioOptimizer(prices)
         risks, rets = optimizer.efficient_frontier_points()
-        
+
+        # Determine optimization method and get optimal point
+        method = data.get("method", "mean_variance")
+        optimal = None
+        if method == "mean_variance":
+            weights, performance = optimizer.max_sharpe_portfolio()
+            # performance: (ret, std, sharpe)
+            optimal = {"expected_return": performance[0], "risk": performance[1]}
+        elif method == "min_variance":
+            weights, performance = optimizer.min_variance_portfolio()
+            optimal = {"expected_return": performance[0], "risk": performance[1]}
+        elif method == "cvar":
+            weights = optimizer.cvar_portfolio()
+            # Compute expected return and risk for CVaR portfolio
+            w = np.array([weights[ticker] for ticker in optimizer.prices.columns])
+            exp_return = float(np.dot(w, optimizer.exp_returns))
+            risk = float(np.sqrt(np.dot(w, np.dot(optimizer.cov_matrix, w))))
+            optimal = {"expected_return": exp_return, "risk": risk}
+        else:
+            weights = None
+            optimal = None
+
         return jsonify({
-            "risks": risks, 
-            "returns": rets
+            "risks": risks,
+            "returns": rets,
+            "optimal": optimal,
+            "weights": weights
         })
     except Exception as e:
         print(f"Error in efficient_frontier: {str(e)}")
