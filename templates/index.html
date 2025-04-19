@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Portfolio Optimization Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/chart.min.js"></script>
+</head>
+<body>
+    <h1>Portfolio Optimization Tool</h1>
+    <form id="data-form">
+        <label>Ticker symbols (comma separated): <input type="text" name="symbols" value="REE,FMC,TLG"></label><br>
+        <label>Start Date: <input type="date" name="start_date" value="2019-01-01"></label><br>
+        <label>End Date: <input type="date" name="end_date" value="2025-04-15"></label><br>
+        <button type="submit">Load Data</button>
+    </form>
+
+    <div id="data-section" style="display:none;">
+        <h2>Optimization</h2>
+        <label>Optimization Method:
+            <select id="method-select">
+                <option value="mean_variance">Mean-Variance (Max Sharpe)</option>
+                <option value="min_variance">Minimum Variance</option>
+                <option value="max_sharpe">Maximum Sharpe Ratio</option>
+                <option value="cvar">Minimum CVaR</option>
+            </select>
+        </label>
+        <button id="optimize-btn">Optimize Portfolio</button>
+        <button id="frontier-btn">Show Efficient Frontier</button>
+        <button id="random-btn" disabled>Show Random Portfolios</button>
+        <button id="plot-btn" disabled>Generate Efficient Frontier Plot</button>
+        <div id="results-section" style="margin-top:1em;"></div>
+        <div id="max-sharpe-section" style="margin-top:1em; display:none;"></div>
+        <div id="frontier-section" style="margin-top:1em;"></div>
+        <canvas id="frontier-chart" width="600" height="350" style="display:none;margin-top:1em;"></canvas>
+        <div id="plot-section" style="margin-top:1em; display:none;">
+            <h3>Efficient Frontier Plot with Random Portfolios</h3>
+            <img id="ef-plot" style="max-width:100%; height:auto;" />
+        </div>
+    </div>
+
+    <script>
+    let loadedPrices = null;
+    document.getElementById('data-form').onsubmit = async function(e) {
+        e.preventDefault();
+        const form = e.target;
+        const symbols = form.symbols.value.split(',').map(s => s.trim());
+        const start_date = form.start_date.value;
+        const end_date = form.end_date.value;
+        const res = await fetch('/api/load_data', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({symbols, start_date, end_date})
+        });
+        const data = await res.json();
+        loadedPrices = data;
+        document.getElementById('data-section').style.display = 'block';
+        document.getElementById('results-section').innerHTML = '';
+        document.getElementById('frontier-section').innerHTML = '';
+    };
+
+    document.getElementById('optimize-btn').onclick = async function(e) {
+        e.preventDefault();
+        if (!loadedPrices) return;
+        const method = document.getElementById('method-select').value;
+        const res = await fetch('/api/optimize', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({prices: loadedPrices, columns: loadedPrices.columns, method})
+        });
+        const result = await res.json();
+        let html = '<h3>Portfolio Weights</h3><table><tr><th>Ticker</th><th>Weight</th></tr>';
+        for (const [ticker, weight] of Object.entries(result.weights)) {
+            html += `<tr><td>${ticker}</td><td>${(weight*100).toFixed(2)}%</td></tr>`;
+        }
+        html += '</table>';
+        if (result.performance) {
+            html += '<h3>Performance Metrics</h3>';
+            html += `<pre>${JSON.stringify(result.performance, null, 2)}</pre>`;
+        }
+        document.getElementById('results-section').innerHTML = html;
+    };
+
+    document.getElementById('frontier-btn').onclick = async function(e) {
+        e.preventDefault();
+        if (!loadedPrices) return;
+        const res = await fetch('/api/efficient_frontier', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({prices: loadedPrices, columns: loadedPrices.columns})
+        });
+        const result = await res.json();
+        // Table output
+        let html = '<h3>Efficient Frontier Points</h3><table><tr><th>Risk</th><th>Return</th></tr>';
+        for (let i = 0; i < result.risks.length; ++i) {
+            html += `<tr><td>${result.risks[i].toFixed(4)}</td><td>${result.returns[i].toFixed(4)}</td></tr>`;
+        }
+        html += '</table>';
+        document.getElementById('frontier-section').innerHTML = html;
+        // Chart output
+        const ctx = document.getElementById('frontier-chart').getContext('2d');
+        document.getElementById('frontier-chart').style.display = 'block';
+        if (window.frontierChart) window.frontierChart.destroy();
+        window.frontierChart = new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Efficient Frontier',
+                    data: result.risks.map((r, i) => ({x: r, y: result.returns[i]})),
+                    backgroundColor: 'rgba(52, 152, 219, 0.6)',
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { title: { display: true, text: 'Risk (Volatility)' } },
+                    y: { title: { display: true, text: 'Expected Return' } }
+                }
+            }
+        });
+        document.getElementById('random-btn').disabled = false;
+        document.getElementById('plot-btn').disabled = false;
+    };
+
+    document.getElementById('random-btn').onclick = async function(e) {
+        e.preventDefault();
+        if (!loadedPrices) return;
+        const res = await fetch('/api/random_portfolios', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({prices: loadedPrices, columns: loadedPrices.columns})
+        });
+        const result = await res.json();
+        
+        // Display the maximum Sharpe ratio portfolio weights
+        if (result.max_sharpe) {
+            let html = '<h3>Maximum Sharpe Ratio Portfolio (from Random Simulations)</h3>';
+            html += `<p>Sharpe Ratio: ${result.max_sharpe.sharpe_ratio.toFixed(4)}</p>`;
+            html += `<p>Expected Return: ${result.max_sharpe.expected_return.toFixed(4)}</p>`;
+            html += `<p>Risk (Volatility): ${result.max_sharpe.risk.toFixed(4)}</p>`;
+            html += '<table><tr><th>Ticker</th><th>Weight</th></tr>';
+            
+            for (const [ticker, weight] of Object.entries(result.max_sharpe.weights)) {
+                html += `<tr><td>${ticker}</td><td>${(weight*100).toFixed(2)}%</td></tr>`;
+            }
+            html += '</table>';
+            
+            // Add this to the results section
+            document.getElementById('max-sharpe-section').innerHTML = html;
+            document.getElementById('max-sharpe-section').style.display = 'block';
+        }
+        
+        // Remove old random portfolios dataset if present
+        if (window.frontierChart) {
+            window.frontierChart.data.datasets = window.frontierChart.data.datasets.filter(ds => ds.label !== 'Random Portfolios');
+            // Normalize sharpes for color mapping
+            const minSharpe = Math.min(...result.sharpes);
+            const maxSharpe = Math.max(...result.sharpes);
+            const colors = result.sharpes.map(s => {
+                const norm = (s - minSharpe) / (maxSharpe - minSharpe + 1e-8);
+                return `rgba(${34 + Math.round(100*norm)},193,195,0.4)`;
+            });
+            
+            // Add random portfolios to chart
+            window.frontierChart.data.datasets.push({
+                label: 'Random Portfolios',
+                data: result.risks.map((r, i) => ({x: r, y: result.returns[i]})),
+                pointRadius: 2,
+                backgroundColor: colors,
+                showLine: false,
+                order: 0
+            });
+            
+            // Highlight the max Sharpe portfolio with a distinct point
+            if (result.max_sharpe) {
+                window.frontierChart.data.datasets.push({
+                    label: 'Max Sharpe Portfolio',
+                    data: [{
+                        x: result.max_sharpe.risk,
+                        y: result.max_sharpe.expected_return
+                    }],
+                    pointRadius: 8,
+                    backgroundColor: 'rgba(255, 0, 0, 0.8)',
+                    borderColor: 'rgba(255, 0, 0, 1)',
+                    borderWidth: 2,
+                    showLine: false,
+                    order: -1 // To ensure it's drawn on top
+                });
+            }
+            
+            window.frontierChart.update();
+        }
+    };
+    
+    document.getElementById('plot-btn').onclick = async function(e) {
+        e.preventDefault();
+        if (!loadedPrices) return;
+        
+        // Show loading indicator
+        document.getElementById('plot-section').style.display = 'block';
+        document.getElementById('ef-plot').src = '/static/loading.gif'; // You may need to add this image
+        
+        try {
+            // Create a URL for the plot image
+            const plotUrl = '/api/plot_efficient_frontier';
+            
+            // Fetch the plot image
+            const response = await fetch(plotUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    prices: loadedPrices, 
+                    columns: loadedPrices.columns,
+                    n_random_portfolios: 5000 // You can adjust this number
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            // Convert the response to a blob
+            const blob = await response.blob();
+            
+            // Create a URL for the blob
+            const imageUrl = URL.createObjectURL(blob);
+            
+            // Set the image source
+            document.getElementById('ef-plot').src = imageUrl;
+            document.getElementById('plot-section').style.display = 'block';
+        } catch (error) {
+            console.error('Error fetching plot:', error);
+            document.getElementById('plot-section').innerHTML = `<p>Error generating plot: ${error.message}</p>`;
+        }
+    };
+    </script>
+</body>
+</html>
