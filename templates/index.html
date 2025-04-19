@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Portfolio Optimization Tool</title>
     <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <h1>Portfolio Optimization Tool</h1>
@@ -35,7 +35,7 @@
         <canvas id="frontier-chart" width="600" height="350" style="display:none;margin-top:1em;"></canvas>
         <div id="plot-section" style="margin-top:1em; display:none;">
             <h3>Efficient Frontier Plot with Random Portfolios</h3>
-            <img id="ef-plot" style="max-width:100%; height:auto;" />
+            <img id="ef-plot" src="/efficient_frontier_chart" style="max-width: 100%; display: none;" alt="Efficient Frontier Plot">
         </div>
     </div>
 
@@ -192,46 +192,15 @@
         }
     };
     
-    document.getElementById('plot-btn').onclick = async function(e) {
+    document.getElementById('plot-btn').onclick = function(e) {
         e.preventDefault();
         if (!loadedPrices) return;
-        
-        // Show loading indicator
+        // Show the plot section and reload the image
         document.getElementById('plot-section').style.display = 'block';
-        document.getElementById('ef-plot').src = '/static/loading.gif'; // You may need to add this image
-        
-        try {
-            // Create a URL for the plot image
-            const plotUrl = '/api/plot_efficient_frontier';
-            
-            // Fetch the plot image
-            const response = await fetch(plotUrl, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    prices: loadedPrices, 
-                    columns: loadedPrices.columns,
-                    n_random_portfolios: 5000 // You can adjust this number
-                })
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            // Convert the response to a blob
-            const blob = await response.blob();
-            
-            // Create a URL for the blob
-            const imageUrl = URL.createObjectURL(blob);
-            
-            // Set the image source
-            document.getElementById('ef-plot').src = imageUrl;
-            document.getElementById('plot-section').style.display = 'block';
-        } catch (error) {
-            console.error('Error fetching plot:', error);
-            document.getElementById('plot-section').innerHTML = `<p>Error generating plot: ${error.message}</p>`;
-        }
+        // Force reload the image by updating the src with a cache-buster
+        var efPlot = document.getElementById('ef-plot');
+        efPlot.src = '/efficient_frontier_chart?' + new Date().getTime();
+        efPlot.style.display = 'block';
     };
     </script>
 </body>

@@ -1,8 +1,10 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
+from flask import flash
 from data_loader import DataLoader
 import os
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your_secret_key')  # Needed for session
 
 @app.route("/")
 def index():
@@ -17,6 +19,9 @@ def load_data():
     loader = DataLoader(symbols, start_date, end_date)
     all_data = loader.fetch()
     combined = DataLoader.combine_close_prices(all_data)
+    # Save the last loaded prices in session for chart rendering
+    if not isinstance(combined, dict):
+        session['latest_prices'] = combined.to_dict(orient="split")
     # Return as dict for test compatibility with columns preserved
     if isinstance(combined, dict):
         return jsonify(combined)
@@ -255,62 +260,30 @@ def random_portfolios():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/plot_efficient_frontier", methods=["POST"])
-def plot_efficient_frontier():
-    try:
-        data = request.json
-        
-        # Reconstruct DataFrame with original column names (tickers)
-        prices_data = data.get("prices")
-        columns = data.get("columns", None)
-        
-        if prices_data is None:
-            return jsonify({"error": "No price data provided"}), 400
-        
-        # Handle different possible data structures
-        if isinstance(prices_data, dict):
-            if "data" in prices_data and "index" in prices_data:
-                # Handle the case where prices is a dict with data/index/columns format
-                df_data = prices_data["data"]
-                df_index = prices_data["index"]
-                df_columns = columns or prices_data.get("columns", None)
-                
-                # Convert to DataFrame
-                prices = pd.DataFrame(df_data, index=df_index, columns=df_columns)
-                
-                # Set index to datetime if it's not already
-                if not isinstance(prices.index, pd.DatetimeIndex):
-                    prices.index = pd.to_datetime(prices.index)
-            else:
-                # It's a dict but not in the expected format, try direct conversion
-                prices = pd.DataFrame(prices_data)
-        else:
-            # Direct DataFrame construction for other formats
-            prices = pd.DataFrame(prices_data)
-        
-        # Ensure numeric data
-        prices = prices.apply(pd.to_numeric, errors='coerce')
-        
-        # Drop NA values to ensure data consistency
-        prices = prices.dropna(axis=1, how='all').dropna(axis=0, how='any')
-        
-        if prices.empty:
-            return jsonify({"error": "No valid data after dropping NA values"}), 400
-            
-        print(f"DataFrame for plotting: shape={prices.shape}")
-        
-        # Create optimizer and generate the plot
-        optimizer = PortfolioOptimizer(prices)
-        n_random_portfolios = int(data.get("n_random_portfolios", 5000))
-        _, img_buffer = optimizer.plot_efficient_frontier(n_random_portfolios=n_random_portfolios)
-        
-        # Return the image as a response
-        return send_file(img_buffer, mimetype='image/png')
-    except Exception as e:
-        print(f"Error in plot_efficient_frontier: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+@app.route("/efficient_frontier_chart")
+def efficient_frontier_chart():
+    # Use the latest prices from session
+    latest_prices = session.get('latest_prices')
+    if not latest_prices:
+        flash("No price data available. Please upload data first.")
+        # Return a placeholder image or error
+        from flask import abort
+        return abort(404)
+    # Reconstruct DataFrame
+    df_data = latest_prices["data"]
+    df_index = latest_prices["index"]
+    df_columns = latest_prices["columns"]
+    prices = pd.DataFrame(df_data, index=df_index, columns=df_columns)
+    if not isinstance(prices.index, pd.DatetimeIndex):
+        prices.index = pd.to_datetime(prices.index)
+    prices = prices.apply(pd.to_numeric, errors='coerce')
+    prices = prices.dropna(axis=1, how='all').dropna(axis=0, how='any')
+    if prices.empty:
+        from flask import abort
+        return abort(404)
+    optimizer = PortfolioOptimizer(prices)
+    _, img_buffer = optimizer.plot_efficient_frontier(n_random_portfolios=5000)
+    return send_file(img_buffer, mimetype='image/png')
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
