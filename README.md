@@ -46,14 +46,28 @@ This tool provides portfolio optimization and analysis using several methods, in
 To deploy the application using Docker, follow these steps:
 
 1. Build the Docker image:
-   ```cmd
-   docker build -t portfolio-optimizer .
+   ```sh
+   docker build -t importfolio .
    ```
 2. Run the Docker container:
-   ```cmd
-   docker run -p 5000:5000 portfolio-optimizer
+   ```sh
+   docker run -p 5000:5000 importfolio
    ```
 3. Access the application at `http://localhost:5000`
+
+## Docker Compose
+You can also use Docker Compose for easier multi-container management (or just to simplify the run command):
+
+1. Start the app:
+   ```sh
+   docker-compose up --build
+   ```
+2. Stop the app:
+   ```sh
+   docker-compose down
+   ```
+
+The app will be available at [http://localhost:5000](http://localhost:5000).
 
 **.dockerignore explanation:**
 The `.dockerignore` file is used to specify files and directories that should be ignored by Docker during the build process. This is useful for excluding sensitive information, such as API keys or credentials, from the Docker image.
